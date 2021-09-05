@@ -2,12 +2,14 @@
 #include "RexConsoleEngine.h"
 
 
+
 int main()
 {
 	Console c(200,100);
 
 	while (true)
 	{
+		c.PollInputs();
 		c.Clear(Console::Pixel(Console::Color::Black));
 
 		for (int x = 0; x < c.GetWidth(); x++)
@@ -28,6 +30,12 @@ int main()
 			c.DrawLine(centerX, centerY, centerX + cos(a * (3.14f / 180.0f)) * 25, centerY + sin(a * (3.14f / 180.0f)) * 25, Console::Color::Dark_Green);
 		}
 
+		if (c.IsPressed(Console::Key::MouseForward))
+			c.Draw(5,5, Console::Pixel(Console::Color::Red));
+
+		c.Draw(c.MouseX(), c.MouseY(), Console::Pixel(Console::Color::Yellow));
+
+		c.DrawString(0, 0, Console::Color::White, Console::Color::Black, std::to_wstring(1.0f / c.DeltaTime()));
 
 		c.BlipToScreen();
 	}
