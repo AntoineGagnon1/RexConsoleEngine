@@ -4,7 +4,6 @@
 
 #include <iostream>
 #include <chrono>
-#include <string>
 
 
 
@@ -108,7 +107,7 @@ public:
 		}
 	}
 
-	inline void DrawString(int leftX, int topY, Color foreground, Color background, const std::string& str)
+	inline void DrawString(int leftX, int topY, Color foreground, Color background, const std::wstring& str)
 	{
 		int x = leftX;
 		for (int i = 0; i < str.length(); i++)
@@ -126,6 +125,41 @@ public:
 		}
 	}
 
+	void DrawLine(int x1, int y1, int x2, int y2, Color color) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
+	{
+		Pixel p(color); // Pixel used to draw
+
+		if (abs(x2 - x1) > abs(y2 - y1)) // dx > dy then plot along the x axis (this is to reduce/remove gaps)
+		{
+			if (x1 > x2) // Swap both points if x1 > x2
+			{
+				Swap<int>(x1, x2);
+				Swap<int>(y1, y2);
+			}
+
+			float m = (float)(y2 - y1) / (float)(x2 - x1);
+			float b = y1 - (m * x1);
+
+			for (int x = x1; x <= x2; x++)
+				Draw(x, roundf(m * x + b), p);
+		}
+		else // plot along the y axis
+		{
+			if (y1 > y2) // Swap both points if y1 > y2
+			{
+				Swap<int>(x1, x2);
+				Swap<int>(y1, y2);
+			}
+
+			float m = (float)(x2 - x1) / (float)(y2 - y1);
+			float b = x1 - (m * y1);
+
+			for (int y = y1; y <= y2; y++)
+				Draw(roundf(m * y + b), y, p);
+		}
+	}
+
+
 	inline void BlipToScreen()
 	{
 		auto now = std::chrono::high_resolution_clock::now();
@@ -142,4 +176,13 @@ public:
 	inline int GetWidth() const { return m_width; }
 	inline int GetHeight() const { return m_height; }
 	inline float DeltaTime() const { return m_deltaDrawTime; }
+
+private:
+	template<class T>
+	void Swap(T& a, T& b)
+	{
+		T temp = a;
+		a = b;
+		b = temp;
+	}
 };
