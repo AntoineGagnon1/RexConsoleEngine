@@ -13,6 +13,8 @@ int main()
 
 		if (c->IsPressed(Console::Key::Escape))
 			break;
+		if (c->ShouldClose())
+			break;
 
 		if (c->ScrollDelta() > 0)
 			scrollPos--;

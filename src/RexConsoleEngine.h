@@ -4,6 +4,8 @@
 
 #include <iostream>
 #include <chrono>
+#include <atomic>
+#include <mutex>
 
 
 class Console
@@ -185,6 +187,11 @@ private:
 	KeyData* m_keys; // Key data
 	int m_mouseDeltaX, m_mouseDeltaY, m_mouseX, m_mouseY;
 	int m_scrollDelta;
+
+	// Close events
+	static std::atomic_bool m_shouldClose;
+	static std::mutex m_closeMutex;
+	static std::condition_variable m_closeCall;
 public:
 
 	Console(unsigned int width, unsigned int height, const std::wstring& title) 
@@ -236,6 +243,9 @@ public:
 		cursorInfo.dwSize = 1;
 		cursorInfo.bVisible = false;
 		SetConsoleCursorInfo(m_hConsole, &cursorInfo);
+
+		// Set the close button handler
+		SetConsoleCtrlHandler(CloseHandler, TRUE);
 	}
 
 	~Console()
@@ -244,6 +254,7 @@ public:
 		CloseHandle(m_hConsole); // Close the new buffer that was opened 
 		delete[] m_bufScreen;
 		delete[] m_keys;
+		m_closeCall.notify_all(); // Tell the close handler that it can close (if it was called)
 	}
 
 	// Width of the console, in characters
@@ -256,7 +267,8 @@ public:
 	// Set the title of the window
 	inline void SetTitle(const std::wstring& title) { m_title = title; }
 
-
+	// Should the app close ? (ex : close button was pressed)
+	inline bool ShouldClose() const { return m_shouldClose.load(); }
 
 
 	/* ----- Graphics ------ */
@@ -453,4 +465,25 @@ private:
 		m_keys[keycode].justUp = m_keys[keycode].isDown && !down; // Was down and now is up
 		m_keys[keycode].isDown = down;
 	}
+
+	// Handles the close button
+	static BOOL CloseHandler(DWORD event)
+	{
+		if (event == CTRL_CLOSE_EVENT)
+		{
+			std::unique_lock<std::mutex> lock(m_closeMutex);
+			std::chrono::seconds duration(5); // timeout after 5 seconds
+			m_shouldClose.exchange(true);
+			
+			m_closeCall.wait_for(lock, duration, [] {return false; });
+			return TRUE;
+		}
+
+		return FALSE; // Pass the event to the next handler
+	}
 };
+
+// Define static vars
+std::atomic_bool Console::m_shouldClose(false);
+std::mutex Console::m_closeMutex;
+std::condition_variable Console::m_closeCall;
