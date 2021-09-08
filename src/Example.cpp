@@ -7,12 +7,20 @@ int main()
 {
 	Console* c = new Console(200,100);
 
+	int scrollPos = 50;
+
 	while (true)
 	{
 		c->PollInputs();
 
 		if (c->IsPressed(Console::Key::Escape))
 			break;
+
+		if (c->ScrollDelta() > 0)
+			scrollPos--;
+		else if (c->ScrollDelta() < 0)
+			scrollPos++;
+
 
 		c->Clear(Console::Pixel(Console::Color::Black));
 
@@ -35,6 +43,8 @@ int main()
 		}
 
 		c->Draw(c->MouseX(), c->MouseY(), Console::Pixel(c->IsPressed(Console::Key::MouseLeft) ? Console::Color::Red : Console::Color::Yellow));
+
+		c->Draw(20, scrollPos, Console::Pixel(Console::Color::Blue));
 
 		c->DrawString(0, 0, Console::Color::White, Console::Color::Black, std::to_wstring(1.0f / c->DeltaTime()));
 

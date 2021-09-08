@@ -184,11 +184,13 @@ private:
 	static const int KeyCount = 254;
 	KeyData m_keys[KeyCount];
 	int m_mouseDeltaX, m_mouseDeltaY, m_mouseX, m_mouseY;
+	int m_scrollDelta;
 public:
 
 	Console(unsigned int width, unsigned int height) 
 		: m_width(width), m_height(height),
-		  m_displaySize({0, 0, (SHORT)width - 1, (SHORT)height - 1})
+		  m_displaySize({0, 0, (SHORT)width - 1, (SHORT)height - 1}),
+		  m_mouseDeltaX(0), m_mouseDeltaY(0), m_scrollDelta(0)
 	{
 		// Resize the console
 		m_console = GetConsoleWindow();
@@ -328,6 +330,8 @@ public:
 
 	inline void PollInputs()
 	{
+		m_scrollDelta = 0;
+
 		// Catch console events
 		int mx = m_mouseX, my = m_mouseY;
 		INPUT_RECORD inBuf[32];
@@ -347,6 +351,7 @@ public:
 					m_mouseY = inBuf[i].Event.MouseEvent.dwMousePosition.Y;
 					break;
 				case MOUSE_WHEELED: // Scroll wheel
+					m_scrollDelta = (int)inBuf[i].Event.MouseEvent.dwButtonState >> 16;
 					break;
 				case 0: // Mouse click
 					UpdateKey((int)Key::MouseLeft, inBuf[i].Event.MouseEvent.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED);
@@ -380,10 +385,11 @@ public:
 	inline int MouseDeltaY() const { return m_mouseDeltaY; }
 	inline int MouseX() const { return m_mouseX; }
 	inline int MouseY() const { return m_mouseY; }
+	inline int ScrollDelta() const { return m_scrollDelta; }
 
 private:
 	template<class T>
-	void Swap(T& a, T& b)
+	static void Swap(T& a, T& b)
 	{
 		T temp = a;
 		a = b;
@@ -391,7 +397,7 @@ private:
 	}
 
 	// Resize the usable part of the console
-	void ClientResize(int nWidth, int nHeight)
+	void ClientResize(int nWidth, int nHeight) const
 	{
 		RECT rcClient, rcWind;
 		POINT ptDiff;
@@ -403,7 +409,7 @@ private:
 	}
 
 	// Show / Hide the text cursor
-	void ShowTextCursor(bool value)
+	void ShowTextCursor(bool value) const
 	{
 		CONSOLE_CURSOR_INFO cursorInfo;
 		GetConsoleCursorInfo(m_hConsole, &cursorInfo);
