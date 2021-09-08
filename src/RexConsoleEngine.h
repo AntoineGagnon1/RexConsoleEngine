@@ -7,6 +7,7 @@
 #include <atomic>
 #include <mutex>
 
+#define Error(a) PrintError(a, __LINE__) // is undef at the end of the file
 
 class Console
 {
@@ -206,15 +207,22 @@ public:
 
 		// Get the window HWND
 		m_console = GetConsoleWindow();
+		if (m_console == NULL)
+			Error("Could not get the window HWND");
 
 		// Save the console handle for the destructor
 		m_hPreviousConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+		if (m_hPreviousConsole == INVALID_HANDLE_VALUE)
+			Error("Could not get the output handle");
 
 		// Create the new output buffer
 		memset(m_bufScreen, 0, sizeof(CHAR_INFO) * m_width * m_height);
 		m_hConsole = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
-		SetConsoleActiveScreenBuffer(m_hConsole);
-
+		if (m_hConsole == INVALID_HANDLE_VALUE)
+			Error("Could not create the new output buffer");
+		if (!SetConsoleActiveScreenBuffer(m_hConsole))
+			Error("Could not set the screen buffer");
+	
 		// Set font to 8x8 Terminal (Raster fonts)
 		CONSOLE_FONT_INFOEX font;
 		font.cbSize = sizeof(CONSOLE_FONT_INFOEX);
@@ -223,10 +231,12 @@ public:
 		font.FontFamily = FF_DONTCARE;
 		font.FontWeight = FW_NORMAL;
 		wcscpy_s(font.FaceName, L"Terminal");
-		SetCurrentConsoleFontEx(m_hConsole, FALSE, &font);
+		if (!SetCurrentConsoleFontEx(m_hConsole, FALSE, &font))
+			Error("Could not set the font");
 
 		// Prevent user from resizing
-		SetWindowLong(m_console, GWL_STYLE, GetWindowLong(m_console, GWL_STYLE) & ~WS_MAXIMIZEBOX & ~WS_SIZEBOX);
+		if (!SetWindowLong(m_console, GWL_STYLE, GetWindowLong(m_console, GWL_STYLE) & ~WS_MAXIMIZEBOX & ~WS_SIZEBOX))
+			Error("Could not set the window parameters");
 
 		ClientResize(m_width * 8, m_height * 8); // Resize after disabling resizing else it wont work properly
 
@@ -236,22 +246,30 @@ public:
 
 		// Inputs
 		m_hConsoleIn = GetStdHandle(STD_INPUT_HANDLE);
-		SetConsoleMode(m_hConsoleIn, ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT); // ENABLE_EXTENDED_FLAGS = no text selection with the mouse
+		if (m_hConsoleIn == INVALID_HANDLE_VALUE)
+			Error("Could not get the input handle");
+		if (!SetConsoleMode(m_hConsoleIn, ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT)) // ENABLE_EXTENDED_FLAGS = no text selection with the mouse
+			Error("Could not set the console mode");
 
 		// Disable the cursor
 		CONSOLE_CURSOR_INFO cursorInfo;
 		cursorInfo.dwSize = 1;
 		cursorInfo.bVisible = false;
-		SetConsoleCursorInfo(m_hConsole, &cursorInfo);
+		if (!SetConsoleCursorInfo(m_hConsole, &cursorInfo))
+			Error("Could not remove the cursor");
+
 
 		// Set the close button handler
-		SetConsoleCtrlHandler(CloseHandler, TRUE);
+		if (!SetConsoleCtrlHandler(CloseHandler, TRUE))
+			Error("Could not set the close handler");
 	}
 
 	~Console()
 	{
-		SetConsoleActiveScreenBuffer(m_hPreviousConsole); // Switch back to the old buffer
-		CloseHandle(m_hConsole); // Close the new buffer that was opened 
+		if (!SetConsoleActiveScreenBuffer(m_hPreviousConsole))// Switch back to the old buffer
+			Error("Could not set the screen buffer");
+		if (!CloseHandle(m_hConsole)) // Close the new buffer that was opened 
+			Error("Could not delete the screen buffer");
 		delete[] m_bufScreen;
 		delete[] m_keys;
 		m_closeCall.notify_all(); // Tell the close handler that it can close (if it was called)
@@ -356,10 +374,12 @@ public:
 		// Title - fps
 		wchar_t s[256];
 		swprintf_s(s, 256, L"%s - %d fps", m_title.c_str(), (int)(1.0f / m_deltaDrawTime));
-		SetConsoleTitle(s);
-		
+		if (!SetConsoleTitle(s))
+			Error("Could not set the title");
+
 		// Blip tot screen
-		WriteConsoleOutput(m_hConsole, m_bufScreen, { (short)m_width, (short)m_height }, {0,0}, &m_displaySize);
+		if (!WriteConsoleOutput(m_hConsole, m_bufScreen, { (short)m_width, (short)m_height }, { 0,0 }, &m_displaySize))
+			Error("Could not write to the output buffer");
 	}
 
 
@@ -376,9 +396,14 @@ public:
 		int mx = m_mouseX, my = m_mouseY;
 		INPUT_RECORD inBuf[32];
 		DWORD events = 0;
-		GetNumberOfConsoleInputEvents(m_hConsoleIn, &events);
+		if (!GetNumberOfConsoleInputEvents(m_hConsoleIn, &events))
+			Error("Could not get the number of input events");
+
 		if (events > 0)
-			ReadConsoleInput(m_hConsoleIn, inBuf, events, &events);
+		{
+			if (!ReadConsoleInput(m_hConsoleIn, inBuf, events, &events))
+				Error("Could not read the input events");
+		}
 
 		for (DWORD i = 0; i < events; i++)
 		{
@@ -481,9 +506,20 @@ private:
 
 		return FALSE; // Pass the event to the next handler
 	}
+
+	// Report an error
+	void PrintError(const std::string& str, int line) 
+	{
+		m_shouldClose.exchange(true); // Tell the user to close
+		SetConsoleActiveScreenBuffer(m_hPreviousConsole); // Switch back to the old buffer
+		std::cout << "[Error] (RexConsoleEngine, line : " << line << ") : " << str << std::endl; // Print the error
+		std::cin.get(); // Wait for user feedback
+	}
 };
 
 // Define static vars
 std::atomic_bool Console::m_shouldClose(false);
 std::mutex Console::m_closeMutex;
 std::condition_variable Console::m_closeCall;
+
+#undef Error(a)
