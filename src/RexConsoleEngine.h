@@ -166,40 +166,44 @@ private:
 		bool justUp = false;
 	};
 
-	HANDLE m_hPreviousConsole; // a handle to the initial console
-	HANDLE m_hConsole; // a handle to the console window
-	HANDLE m_hConsoleIn; // handle for mouse position
-	HWND m_console;
+	HANDLE m_hPreviousConsole; // Handle to the initial console buffer
+	HANDLE m_hConsole; // Handle to the new console buffer (the one used)
+	HANDLE m_hConsoleIn; // Handle to the input buffer
+	HWND m_console; // Window index (actual window, not console)
 
 	CHAR_INFO* m_bufScreen; // The screen buffer
-	SMALL_RECT m_displaySize;
+	SMALL_RECT m_displaySize; // Size of the display area, used by WriteConsoleOutput()
 
 	int m_width, m_height; // the size of the screen, in characters
+	std::wstring m_title; // The title set by the user
 
-	std::chrono::steady_clock::time_point m_timeLastDraw;
-
+	std::chrono::steady_clock::time_point m_timeLastDraw; // Time of the last draw call (used for m_deltaDrawTime)
 	float m_deltaDrawTime; // Delta time since last draw call, in seconds
 
 	// Inputs
-	static const int KeyCount = 254;
-	KeyData m_keys[KeyCount];
+	static const int KeyCount = 254; // max index of the Key enum
+	KeyData* m_keys; // Key data
 	int m_mouseDeltaX, m_mouseDeltaY, m_mouseX, m_mouseY;
 	int m_scrollDelta;
 public:
 
-	Console(unsigned int width, unsigned int height) 
+	Console(unsigned int width, unsigned int height, const std::wstring& title) 
 		: m_width(width), m_height(height),
 		  m_displaySize({0, 0, (SHORT)width - 1, (SHORT)height - 1}),
-		  m_mouseDeltaX(0), m_mouseDeltaY(0), m_scrollDelta(0)
+		  m_mouseDeltaX(0), m_mouseDeltaY(0), m_scrollDelta(0),
+		  m_title(title)
 	{
-		// Resize the console
+		// Create the key array and the screen buffer
+		m_keys = new KeyData[KeyCount];
+		m_bufScreen = new CHAR_INFO[m_width * m_height];
+
+		// Get the window HWND
 		m_console = GetConsoleWindow();
 
 		// Save the console handle for the destructor
 		m_hPreviousConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
-		// Create the screen buffer
-		m_bufScreen = new CHAR_INFO[m_width * m_height];
+		// Create the new output buffer
 		memset(m_bufScreen, 0, sizeof(CHAR_INFO) * m_width * m_height);
 		m_hConsole = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
 		SetConsoleActiveScreenBuffer(m_hConsole);
@@ -214,32 +218,50 @@ public:
 		wcscpy_s(font.FaceName, L"Terminal");
 		SetCurrentConsoleFontEx(m_hConsole, FALSE, &font);
 
-
-		// Disable resizing
+		// Prevent user from resizing
 		SetWindowLong(m_console, GWL_STYLE, GetWindowLong(m_console, GWL_STYLE) & ~WS_MAXIMIZEBOX & ~WS_SIZEBOX);
 
 		ClientResize(m_width * 8, m_height * 8); // Resize after disabling resizing else it wont work properly
 
-		// Set last draw time
+		// Init last draw time
 		m_timeLastDraw = std::chrono::high_resolution_clock::now();
 		m_deltaDrawTime = 0.0f;
 
-		// Mouse inputs
+		// Inputs
 		m_hConsoleIn = GetStdHandle(STD_INPUT_HANDLE);
 		SetConsoleMode(m_hConsoleIn, ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT); // ENABLE_EXTENDED_FLAGS = no text selection with the mouse
 
-
 		// Disable the cursor
-		ShowTextCursor(false);
+		CONSOLE_CURSOR_INFO cursorInfo;
+		cursorInfo.dwSize = 1;
+		cursorInfo.bVisible = false;
+		SetConsoleCursorInfo(m_hConsole, &cursorInfo);
 	}
 
 	~Console()
 	{
-		ShowTextCursor(true);
-		SetConsoleActiveScreenBuffer(m_hPreviousConsole);
+		SetConsoleActiveScreenBuffer(m_hPreviousConsole); // Switch back to the old buffer
+		CloseHandle(m_hConsole); // Close the new buffer that was opened 
 		delete[] m_bufScreen;
+		delete[] m_keys;
 	}
 
+	// Width of the console, in characters
+	inline int Width() const { return m_width; }
+	// Height of the console, in characters
+	inline int Height() const { return m_height; }
+	// Time since the last BlipToScreen() call, in seconds
+	inline float DeltaTime() const { return m_deltaDrawTime; }
+
+	// Set the title of the window
+	inline void SetTitle(const std::wstring& title) { m_title = title; }
+
+
+
+
+	/* ----- Graphics ------ */
+
+	// Fill the buffer with a pixel
 	inline void Clear(const Pixel& pixel)
 	{
 		for (int i = 0; i < m_width * m_height; i++)
@@ -249,6 +271,7 @@ public:
 		}
 	}
 
+	// Set a pixel at x,y
 	inline void Draw(int x, int y, const Pixel& pixel)
 	{
 		if (x >= 0 && x < m_width && y >= 0 && y < m_height)
@@ -258,6 +281,17 @@ public:
 		}
 	}
 
+	// Set a pixel at x,y to a color
+	inline void Draw(int x, int y, Color color)
+	{
+		if (x >= 0 && x < m_width && y >= 0 && y < m_height)
+		{
+			m_bufScreen[y * m_width + x].Char.UnicodeChar = (short)Pixel::Type::Full;
+			m_bufScreen[y * m_width + x].Attributes = (short)color;
+		}
+	}
+
+	// Draw a string using the top-left position
 	inline void DrawString(int leftX, int topY, Color foreground, Color background, const std::wstring& str)
 	{
 		int x = leftX;
@@ -276,10 +310,9 @@ public:
 		}
 	}
 
-	void DrawLine(int x1, int y1, int x2, int y2, Color color) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
+	// Draw a line from (x1,y1) to (x2,y2)
+	void DrawLine(int x1, int y1, int x2, int y2, const Pixel& pixel) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
 	{
-		Pixel p(color); // Pixel used to draw
-
 		if (abs(x2 - x1) > abs(y2 - y1)) // dx > dy then plot along the x axis (this is to reduce/remove gaps)
 		{
 			if (x1 > x2) // Swap both points if x1 > x2
@@ -292,7 +325,7 @@ public:
 			float b = y1 - (m * x1);
 
 			for (int x = x1; x <= x2; x++)
-				Draw(x, roundf(m * x + b), p);
+				Draw(x, roundf(m * x + b), pixel);
 		}
 		else // plot along the y axis
 		{
@@ -306,28 +339,36 @@ public:
 			float b = x1 - (m * y1);
 
 			for (int y = y1; y <= y2; y++)
-				Draw(roundf(m * y + b), y, p);
+				Draw(roundf(m * y + b), y, pixel);
 		}
 	}
 
+	// Draw a line from (x1,y1) to (x2,y2)
+	void DrawLine(int x1, int y1, int x2, int y2, Color color) { DrawLine(x1, y1, x2, y2, Pixel(color)); }
 
+	// Print the buffer to screen
 	inline void BlipToScreen()
 	{
+		// Delta time
 		auto now = std::chrono::high_resolution_clock::now();
 		m_deltaDrawTime = std::chrono::duration<float>(now - m_timeLastDraw).count();
 		m_timeLastDraw = now;
 
+		// Title - fps
 		wchar_t s[256];
-		swprintf_s(s, 256, L"%d fps", (int)(1.0f / m_deltaDrawTime));
+		swprintf_s(s, 256, L"%s - %d fps", m_title.c_str(), (int)(1.0f / m_deltaDrawTime));
 		SetConsoleTitle(s);
 		
+		// Blip tot screen
 		WriteConsoleOutput(m_hConsole, m_bufScreen, { (short)m_width, (short)m_height }, {0,0}, &m_displaySize);
 	}
-	
-	inline int GetWidth() const { return m_width; }
-	inline int GetHeight() const { return m_height; }
-	inline float DeltaTime() const { return m_deltaDrawTime; }
 
+
+
+
+	/* ----- Inputs ----- */
+
+	// Check for new inputs
 	inline void PollInputs()
 	{
 		m_scrollDelta = 0;
@@ -342,8 +383,8 @@ public:
 
 		for (DWORD i = 0; i < events; i++)
 		{
-			if (inBuf[i].EventType == MOUSE_EVENT)
-			{ // Mouse
+			if (inBuf[i].EventType == MOUSE_EVENT) // Mouse
+			{
 				switch (inBuf[i].Event.MouseEvent.dwEventFlags)
 				{
 				case MOUSE_MOVED: // Mouse movements
@@ -363,8 +404,8 @@ public:
 					break;
 				}
 			}
-			else if (inBuf[i].EventType == KEY_EVENT)
-			{ // Keyboard
+			else if (inBuf[i].EventType == KEY_EVENT) // Keyboard
+			{
 				UpdateKey(inBuf[i].Event.KeyEvent.wVirtualKeyCode, inBuf[i].Event.KeyEvent.bKeyDown);
 			}
 		}
@@ -377,17 +418,27 @@ public:
 		m_mouseDeltaY = m_mouseY - my;
 	}
 
+	// Is the key pressed now ?
 	inline bool IsPressed(Key key) const { return m_keys[(int)key].isDown; }
+	// Was the key pressed since the last call to PollInputs() ?
 	inline bool WasJustPressed(Key key) const { return m_keys[(int)key].justDown; }
+	// Was the key released since the last call to PollInputs() ?
 	inline bool WasJustReleased(Key key) const { return m_keys[(int)key].justUp; }
 
+	// Distance traveled by the mouse since the last call to PollInputs()
 	inline int MouseDeltaX() const { return m_mouseDeltaX; }
+	// Distance traveled by the mouse since the last call to PollInputs()
 	inline int MouseDeltaY() const { return m_mouseDeltaY; }
+	// Position of the mouse on the screen, in charaters
 	inline int MouseX() const { return m_mouseX; }
+	// Position of the mouse on the screen, in charaters
 	inline int MouseY() const { return m_mouseY; }
+
+	// If > 0 the user scrolled up, if < 0 the user scrolled down
 	inline int ScrollDelta() const { return m_scrollDelta; }
 
 private:
+	// Swap a and b
 	template<class T>
 	static void Swap(T& a, T& b)
 	{
@@ -408,15 +459,7 @@ private:
 		MoveWindow(m_console, rcWind.left, rcWind.top, nWidth + ptDiff.x, nHeight + ptDiff.y, TRUE);
 	}
 
-	// Show / Hide the text cursor
-	void ShowTextCursor(bool value) const
-	{
-		CONSOLE_CURSOR_INFO cursorInfo;
-		GetConsoleCursorInfo(m_hConsole, &cursorInfo);
-		cursorInfo.bVisible = value;
-		SetConsoleCursorInfo(m_hConsole, &cursorInfo);
-	}
-
+	// Update the key using the new value
 	void UpdateKey(int keycode, bool down)
 	{
 		m_keys[keycode].justDown = !m_keys[keycode].isDown && down; // Was not already down, and is down not

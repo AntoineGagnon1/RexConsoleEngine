@@ -5,7 +5,7 @@
 
 int main()
 {
-	Console* c = new Console(200,100);
+	Console* c = new Console(200,100, L"Example");
 
 	int scrollPos = 50;
 
@@ -24,9 +24,9 @@ int main()
 
 		c->Clear(Console::Pixel(Console::Color::Black));
 
-		for (int x = 0; x < c->GetWidth(); x++)
+		for (int x = 0; x < c->Width(); x++)
 		{
-			for (int y = 0; y < c->GetHeight(); y++)
+			for (int y = 0; y < c->Height(); y++)
 			{
 				c->Draw(x,y, Console::Pixel(Console::Color::Dark_Grey, Console::Color::Black, rand() % 26 + 'a'));
 			}
@@ -34,8 +34,8 @@ int main()
 
 		c->DrawString(50, 10, Console::Color::Green, Console::Color::Black, L"Hello world !\ntest !\n\n\nhi !");
 
-		int centerX = c->GetWidth() / 2;
-		int centerY = c->GetHeight() / 2;
+		int centerX = c->Width() / 2;
+		int centerY = c->Height() / 2;
 
 		for (int a = 0; a < 360; a += 15)
 		{
@@ -47,7 +47,7 @@ int main()
 		c->Draw(20, scrollPos, Console::Pixel(Console::Color::Blue));
 
 		c->DrawString(0, 0, Console::Color::White, Console::Color::Black, std::to_wstring(1.0f / c->DeltaTime()));
-
+		
 		c->BlipToScreen();
 	}
 
