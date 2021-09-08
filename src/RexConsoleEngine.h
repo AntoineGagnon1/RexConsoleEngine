@@ -163,15 +163,16 @@ private:
 	{
 		bool isDown = false;
 		bool justDown = false;
-		bool justup = false;
+		bool justUp = false;
 	};
 
+	HANDLE m_hPreviousConsole; // a handle to the initial console
 	HANDLE m_hConsole; // a handle to the console window
 	HANDLE m_hConsoleIn; // handle for mouse position
 	HWND m_console;
-	SMALL_RECT m_rectWindow; // the size of the screen buffer
 
 	CHAR_INFO* m_bufScreen; // The screen buffer
+	SMALL_RECT m_displaySize;
 
 	int m_width, m_height; // the size of the screen, in characters
 
@@ -187,13 +188,13 @@ public:
 
 	Console(unsigned int width, unsigned int height) 
 		: m_width(width), m_height(height),
-		  m_rectWindow({ 0, 0, (short)width - 1, (short)height - 1 })
+		  m_displaySize({0, 0, (SHORT)width - 1, (SHORT)height - 1})
 	{
 		// Resize the console
 		m_console = GetConsoleWindow();
-		RECT r;
-		GetWindowRect(m_console, &r); //stores the console's current dimensions
-		MoveWindow(m_console, r.left, r.top, m_width * 8, m_height * 8, TRUE);
+
+		// Save the console handle for the destructor
+		m_hPreviousConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 		// Create the screen buffer
 		m_bufScreen = new CHAR_INFO[m_width * m_height];
@@ -201,8 +202,21 @@ public:
 		m_hConsole = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
 		SetConsoleActiveScreenBuffer(m_hConsole);
 
+		// Set font to 8x8 Terminal (Raster fonts)
+		CONSOLE_FONT_INFOEX font;
+		font.cbSize = sizeof(CONSOLE_FONT_INFOEX);
+		font.nFont = 0;
+		font.dwFontSize = { 8,8 };
+		font.FontFamily = FF_DONTCARE;
+		font.FontWeight = FW_NORMAL;
+		wcscpy_s(font.FaceName, L"Terminal");
+		SetCurrentConsoleFontEx(m_hConsole, FALSE, &font);
+
+
 		// Disable resizing
 		SetWindowLong(m_console, GWL_STYLE, GetWindowLong(m_console, GWL_STYLE) & ~WS_MAXIMIZEBOX & ~WS_SIZEBOX);
+
+		ClientResize(m_width * 8, m_height * 8); // Resize after disabling resizing else it wont work properly
 
 		// Set last draw time
 		m_timeLastDraw = std::chrono::high_resolution_clock::now();
@@ -211,10 +225,16 @@ public:
 		// Mouse inputs
 		m_hConsoleIn = GetStdHandle(STD_INPUT_HANDLE);
 		SetConsoleMode(m_hConsoleIn, ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT); // ENABLE_EXTENDED_FLAGS = no text selection with the mouse
+
+
+		// Disable the cursor
+		ShowTextCursor(false);
 	}
 
 	~Console()
 	{
+		ShowTextCursor(true);
+		SetConsoleActiveScreenBuffer(m_hPreviousConsole);
 		delete[] m_bufScreen;
 	}
 
@@ -296,10 +316,10 @@ public:
 		m_timeLastDraw = now;
 
 		wchar_t s[256];
-		swprintf_s(s, 256, L"%3.2f fps", 1.0f / m_deltaDrawTime);
+		swprintf_s(s, 256, L"%d fps", (int)(1.0f / m_deltaDrawTime));
 		SetConsoleTitle(s);
 		
-		WriteConsoleOutput(m_hConsole, m_bufScreen, { (short)m_width, (short)m_height }, { 0,0 }, &m_rectWindow);
+		WriteConsoleOutput(m_hConsole, m_bufScreen, { (short)m_width, (short)m_height }, {0,0}, &m_displaySize);
 	}
 	
 	inline int GetWidth() const { return m_width; }
@@ -308,15 +328,7 @@ public:
 
 	inline void PollInputs()
 	{
-		for (int i = 0; i < KeyCount; i++)
-		{
-			bool value = (GetAsyncKeyState(i) & 0x8000);
-			m_keys[i].justDown = !m_keys[i].isDown && value; // Was not already down, and is down not
-			m_keys[i].justup = m_keys[i].isDown && !value; // Was down and now is up
-			m_keys[i].isDown = value;
-		}
-
-		// Get mouse position and delta
+		// Catch console events
 		int mx = m_mouseX, my = m_mouseY;
 		INPUT_RECORD inBuf[32];
 		DWORD events = 0;
@@ -326,12 +338,35 @@ public:
 
 		for (DWORD i = 0; i < events; i++)
 		{
-			if (inBuf[i].EventType == MOUSE_EVENT && inBuf[i].Event.MouseEvent.dwEventFlags == MOUSE_MOVED)
-			{
-				m_mouseX = inBuf[i].Event.MouseEvent.dwMousePosition.X;
-				m_mouseY = inBuf[i].Event.MouseEvent.dwMousePosition.Y;
+			if (inBuf[i].EventType == MOUSE_EVENT)
+			{ // Mouse
+				switch (inBuf[i].Event.MouseEvent.dwEventFlags)
+				{
+				case MOUSE_MOVED: // Mouse movements
+					m_mouseX = inBuf[i].Event.MouseEvent.dwMousePosition.X;
+					m_mouseY = inBuf[i].Event.MouseEvent.dwMousePosition.Y;
+					break;
+				case MOUSE_WHEELED: // Scroll wheel
+					break;
+				case 0: // Mouse click
+					UpdateKey((int)Key::MouseLeft, inBuf[i].Event.MouseEvent.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED);
+					UpdateKey((int)Key::MouseMiddle, inBuf[i].Event.MouseEvent.dwButtonState & FROM_LEFT_2ND_BUTTON_PRESSED);
+					UpdateKey((int)Key::MouseRight, inBuf[i].Event.MouseEvent.dwButtonState & RIGHTMOST_BUTTON_PRESSED);
+					// Mouse forward and backward are not creating an event ?
+					break;
+				default:
+					break;
+				}
+			}
+			else if (inBuf[i].EventType == KEY_EVENT)
+			{ // Keyboard
+				UpdateKey(inBuf[i].Event.KeyEvent.wVirtualKeyCode, inBuf[i].Event.KeyEvent.bKeyDown);
 			}
 		}
+
+		// Fix for mouse forward and backward not generating events :
+		UpdateKey((int)Key::MouseForward, (GetAsyncKeyState((int)Key::MouseForward) & 0x8000));
+		UpdateKey((int)Key::MouseBackward, (GetAsyncKeyState((int)Key::MouseBackward) & 0x8000));
 
 		m_mouseDeltaX = m_mouseX - mx;
 		m_mouseDeltaY = m_mouseY - my;
@@ -339,7 +374,7 @@ public:
 
 	inline bool IsPressed(Key key) const { return m_keys[(int)key].isDown; }
 	inline bool WasJustPressed(Key key) const { return m_keys[(int)key].justDown; }
-	inline bool WasJustReleased(Key key) const { return m_keys[(int)key].justup; }
+	inline bool WasJustReleased(Key key) const { return m_keys[(int)key].justUp; }
 
 	inline int MouseDeltaX() const { return m_mouseDeltaX; }
 	inline int MouseDeltaY() const { return m_mouseDeltaY; }
@@ -353,5 +388,33 @@ private:
 		T temp = a;
 		a = b;
 		b = temp;
+	}
+
+	// Resize the usable part of the console
+	void ClientResize(int nWidth, int nHeight)
+	{
+		RECT rcClient, rcWind;
+		POINT ptDiff;
+		GetClientRect(m_console, &rcClient);
+		GetWindowRect(m_console, &rcWind);
+		ptDiff.x = (rcWind.right - rcWind.left) - rcClient.right;
+		ptDiff.y = (rcWind.bottom - rcWind.top) - rcClient.bottom;
+		MoveWindow(m_console, rcWind.left, rcWind.top, nWidth + ptDiff.x, nHeight + ptDiff.y, TRUE);
+	}
+
+	// Show / Hide the text cursor
+	void ShowTextCursor(bool value)
+	{
+		CONSOLE_CURSOR_INFO cursorInfo;
+		GetConsoleCursorInfo(m_hConsole, &cursorInfo);
+		cursorInfo.bVisible = value;
+		SetConsoleCursorInfo(m_hConsole, &cursorInfo);
+	}
+
+	void UpdateKey(int keycode, bool down)
+	{
+		m_keys[keycode].justDown = !m_keys[keycode].isDown && down; // Was not already down, and is down not
+		m_keys[keycode].justUp = m_keys[keycode].isDown && !down; // Was down and now is up
+		m_keys[keycode].isDown = down;
 	}
 };
