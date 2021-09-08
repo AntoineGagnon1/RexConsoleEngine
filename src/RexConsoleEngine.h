@@ -281,16 +281,6 @@ public:
 		}
 	}
 
-	// Set a pixel at x,y to a color
-	inline void Draw(int x, int y, Color color)
-	{
-		if (x >= 0 && x < m_width && y >= 0 && y < m_height)
-		{
-			m_bufScreen[y * m_width + x].Char.UnicodeChar = (short)Pixel::Type::Full;
-			m_bufScreen[y * m_width + x].Attributes = (short)color;
-		}
-	}
-
 	// Draw a string using the top-left position
 	inline void DrawString(int leftX, int topY, Color foreground, Color background, const std::wstring& str)
 	{
@@ -342,9 +332,6 @@ public:
 				Draw(roundf(m * y + b), y, pixel);
 		}
 	}
-
-	// Draw a line from (x1,y1) to (x2,y2)
-	void DrawLine(int x1, int y1, int x2, int y2, Color color) { DrawLine(x1, y1, x2, y2, Pixel(color)); }
 
 	// Print the buffer to screen
 	inline void BlipToScreen()

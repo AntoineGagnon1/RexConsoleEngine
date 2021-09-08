@@ -1,8 +1,6 @@
 #include <iostream>
 #include "RexConsoleEngine.h"
 
-
-
 int main()
 {
 	Console* c = new Console(200,100, L"Example");
