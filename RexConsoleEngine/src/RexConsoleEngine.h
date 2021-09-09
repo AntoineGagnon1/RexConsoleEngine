@@ -226,8 +226,8 @@ public:
 			Error("Could not set the screen buffer");
 		
 		// Hack to be able to reduce the buffer size :
-		SMALL_RECT const minimal_window = { 0, 0, 1, 1 };
-		if (!SetConsoleWindowInfo(m_hConsole, TRUE, &minimal_window))
+		SMALL_RECT const minimalWindow = { 0, 0, 1, 1 };
+		if (!SetConsoleWindowInfo(m_hConsole, TRUE, &minimalWindow))
 			Error("Could not resize the window");
 
 		if (!SetConsoleScreenBufferSize(m_hConsole, { (SHORT)m_width, (SHORT)m_height }))
@@ -248,7 +248,10 @@ public:
 		if (!SetWindowLong(m_console, GWL_STYLE, GetWindowLong(m_console, GWL_STYLE) & ~WS_MAXIMIZEBOX & ~WS_SIZEBOX))
 			Error("Could not set the window parameters");
 
-		ClientResize(m_width * 8, m_height * 8); // Resize after disabling resizing else it wont work properly
+		// Set the final size
+		SMALL_RECT const rectWindow = { 0, 0, (SHORT)m_width - 1, (SHORT)m_height - 1 };
+		if (!SetConsoleWindowInfo(m_hConsole, TRUE, &rectWindow))
+			Error("Could not set the window info");
 
 		// Init last draw time
 		m_timeLastDraw = std::chrono::high_resolution_clock::now();
@@ -490,18 +493,6 @@ private:
 		T temp = a;
 		a = b;
 		b = temp;
-	}
-
-	// Resize the usable part of the console
-	void ClientResize(int nWidth, int nHeight) const
-	{
-		RECT rcClient, rcWind;
-		POINT ptDiff;
-		GetClientRect(m_console, &rcClient);
-		GetWindowRect(m_console, &rcWind);
-		ptDiff.x = (rcWind.right - rcWind.left) - rcClient.right;
-		ptDiff.y = (rcWind.bottom - rcWind.top) - rcClient.bottom;
-		MoveWindow(m_console, rcWind.left, rcWind.top, nWidth + ptDiff.x, nHeight + ptDiff.y, TRUE);
 	}
 
 	// Update the key using the new value
