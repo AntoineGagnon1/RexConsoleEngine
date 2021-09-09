@@ -260,7 +260,7 @@ public:
 
 
 		// Set the close button handler
-		if (!SetConsoleCtrlHandler(CloseHandler, TRUE))
+		if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CloseHandler, TRUE))
 			Error("Could not set the close handler");
 	}
 
