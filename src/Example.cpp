@@ -1,53 +1,45 @@
-#include <iostream>
 #include "RexConsoleEngine.h"
+
+#define PI 3.14159265358979323846
 
 int main()
 {
+	// Create a 200x100 console titled Example
 	Console* c = new Console(200,100, L"Example");
 
-	int scrollPos = 50;
+	int scrollPos = 0; // Position changed by the mouse scroll wheel
 
 	while (true)
 	{
-		c->PollInputs();
+		c->PollInputs(); // Get the new inputs
 
-		if (c->IsPressed(Console::Key::Escape))
-			break;
-		if (c->ShouldClose())
+		if (c->IsPressed(Console::Key::Escape) || c->ShouldClose()) // Should the window close ? break the loop if true
 			break;
 
+		// Update the scroll position using the new scrollDelta of this frame
 		if (c->ScrollDelta() > 0)
 			scrollPos--;
 		else if (c->ScrollDelta() < 0)
 			scrollPos++;
 
-
+		// Clear the screen buffer with black pixels
 		c->Clear(Console::Pixel(Console::Color::Black));
 
-		for (int x = 0; x < c->Width(); x++)
-		{
-			for (int y = 0; y < c->Height(); y++)
-			{
-				c->Draw(x,y, Console::Pixel(Console::Color::Dark_Grey, Console::Color::Black, rand() % 26 + 'a'));
-			}
-		}
+		// Showcase the DrawString() method
+		c->DrawString(50, 10, Console::Color::White, Console::Color::Black, L"Hello world !\nAnother line !");
 
-		c->DrawString(50, 10, Console::Color::Green, Console::Color::Black, L"Hello world !\ntest !\n\n\nhi !");
-
+		// Center of the screen
 		int centerX = c->Width() / 2;
 		int centerY = c->Height() / 2;
 
-		for (int a = 0; a < 360; a += 15)
-		{
-			c->DrawLine(centerX, centerY, centerX + cos(a * (3.14f / 180.0f)) * 25, centerY + sin(a * (3.14f / 180.0f)) * 25, Console::Color::Dark_Green);
-		}
+		// Draw a line every 36 degrees in a circle at the center of the screen and offset it on the y axis by the scroll position
+		for (int a = 0; a < 360; a += 36)
+			c->DrawLine(centerX, centerY + scrollPos, centerX + cos(a * (PI / 180.0f)) * 25, centerY + scrollPos + sin(a * (PI / 180.0f)) * 25, (Console::Color)((a / 15) + 1));
 
+		// Draw a yellow pixel under the mouse, the pixel will turn red when mouse1 is clicked
 		c->Draw(c->MouseX(), c->MouseY(), Console::Pixel(c->IsPressed(Console::Key::MouseLeft) ? Console::Color::Red : Console::Color::Yellow));
 
-		c->Draw(20, scrollPos, Console::Pixel(Console::Color::Blue));
-
-		c->DrawString(0, 0, Console::Color::White, Console::Color::Black, std::to_wstring(1.0f / c->DeltaTime()));
-		
+		// Apply the screen buffer to the console
 		c->BlipToScreen();
 	}
 
