@@ -215,15 +215,25 @@ public:
 		if (m_hPreviousConsole == INVALID_HANDLE_VALUE)
 			Error("Could not get the output handle");
 
+
 		// Create the new output buffer
 		memset(m_bufScreen, 0, sizeof(CHAR_INFO) * m_width * m_height);
 		m_hConsole = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
 		if (m_hConsole == INVALID_HANDLE_VALUE)
 			Error("Could not create the new output buffer");
+
 		if (!SetConsoleActiveScreenBuffer(m_hConsole))
 			Error("Could not set the screen buffer");
-	
-		// Set font to 8x8 Terminal (Raster fonts)
+		
+		// Hack to be able to reduce the buffer size :
+		SMALL_RECT const minimal_window = { 0, 0, 1, 1 };
+		if (!SetConsoleWindowInfo(m_hConsole, TRUE, &minimal_window))
+			Error("Could not resize the window");
+
+		if (!SetConsoleScreenBufferSize(m_hConsole, { (SHORT)m_width, (SHORT)m_height }))
+			Error("Could not set the size of the screen buffer");
+
+		// Set font to 8x8 Terminal (Raster fonts) -> after resizing
 		CONSOLE_FONT_INFOEX font;
 		font.cbSize = sizeof(CONSOLE_FONT_INFOEX);
 		font.nFont = 0;
