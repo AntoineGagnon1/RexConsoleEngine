@@ -342,7 +342,7 @@ public:
 	}
 
 	// Draw a line from (x1,y1) to (x2,y2)
-	void DrawLine(int x1, int y1, int x2, int y2, const Pixel& pixel) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
+	inline void DrawLine(int x1, int y1, int x2, int y2, const Pixel& pixel) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
 	{
 		if (abs(x2 - x1) > abs(y2 - y1)) // dx > dy then plot along the x axis (this is to reduce/remove gaps)
 		{
@@ -371,6 +371,16 @@ public:
 
 			for (int y = y1; y <= y2; y++)
 				Draw(roundf(m * y + b), y, pixel);
+		}
+	}
+
+	// Fill the area formed by x,y and width,height using the pixel
+	inline void Fill(int x, int y, int width, int height, const Pixel& pixel)
+	{
+		for (int xPos = x; xPos < x + width; xPos++)
+		{
+			for (int yPos = y; yPos < y + height; yPos++)
+				Draw(xPos, yPos, pixel);
 		}
 	}
 
