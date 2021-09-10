@@ -286,7 +286,10 @@ public:
 		delete[] m_bufScreen;
 		delete[] m_keys;
 		m_closeCall.notify_all(); // Tell the close handler that it can close (if it was called)
-		Sleep(10); // Prevent the mutex from being destroyed while in use
+
+		// Wait for the close thread to finish
+		m_closeMutex.lock();
+		m_closeMutex.unlock();
 	}
 
 	// Width of the console, in characters
