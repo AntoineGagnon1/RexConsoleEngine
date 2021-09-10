@@ -6,6 +6,7 @@
 #include <chrono>
 #include <atomic>
 #include <mutex>
+#include <random>
 
 #define Error(a) PrintError(a, __LINE__) // is undef at the end of the file
 
@@ -169,9 +170,9 @@ private:
 		bool justUp = false;
 	};
 
+	// Graphics
 	HANDLE m_hPreviousConsole; // Handle to the initial console buffer
 	HANDLE m_hConsole; // Handle to the new console buffer (the one used)
-	HANDLE m_hConsoleIn; // Handle to the input buffer
 	HWND m_console; // Window index (actual window, not console)
 
 	CHAR_INFO* m_bufScreen; // The screen buffer
@@ -180,14 +181,23 @@ private:
 	int m_width, m_height; // the size of the screen, in characters
 	std::wstring m_title; // The title set by the user
 
-	std::chrono::steady_clock::time_point m_timeLastDraw; // Time of the last draw call (used for m_deltaDrawTime)
-	float m_deltaDrawTime; // Delta time since last draw call, in seconds
 
-	// Inputs
+	// Inputs 
 	static const int KeyCount = 254; // max index of the Key enum
+	HANDLE m_hConsoleIn; // Handle to the input buffer
 	KeyData* m_keys; // Key data
 	int m_mouseDeltaX, m_mouseDeltaY, m_mouseX, m_mouseY;
 	int m_scrollDelta;
+
+
+	// Time
+	std::chrono::steady_clock::time_point m_timeLastDraw; // Time of the last draw call (used for m_deltaDrawTime)
+	float m_deltaDrawTime; // Delta time since last draw call, in seconds
+	
+
+	// Random
+	std::mt19937 m_randEngine;
+
 
 	// Close events
 	static std::atomic_bool m_shouldClose;
@@ -271,6 +281,9 @@ public:
 		if (!SetConsoleCursorInfo(m_hConsole, &cursorInfo))
 			Error("Could not remove the cursor");
 
+		// Random
+		std::random_device rd;
+		m_randEngine.seed(rd());
 
 		// Set the close button handler
 		if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CloseHandler, TRUE))
@@ -304,6 +317,7 @@ public:
 
 	// Should the app close ? (ex : close button was pressed)
 	inline bool ShouldClose() const { return m_shouldClose.load(); }
+
 
 
 	/* ----- Graphics ------ */
@@ -411,7 +425,6 @@ public:
 
 
 
-
 	/* ----- Inputs ----- */
 
 	// Check for new inputs
@@ -487,6 +500,21 @@ public:
 
 	// If > 0 the user scrolled up, if < 0 the user scrolled down
 	inline int ScrollDelta() const { return m_scrollDelta; }
+
+
+
+	/* ----- Random ----- */
+	inline float GetRandom(float min, float max)
+	{
+		std::uniform_real_distribution<float> dist(min, std::nextafter(max, DBL_MAX));
+		return dist(m_randEngine);
+	}
+
+	inline int GetRandom(int min, int max)
+	{
+		std::uniform_int_distribution<int> dist(min, std::nextafter(max, DBL_MAX));
+		return dist(m_randEngine);
+	}
 
 private:
 	// Swap a and b
