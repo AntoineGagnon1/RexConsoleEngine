@@ -2,6 +2,8 @@
 
 #define PI 3.14159265358979323846
 
+using namespace RexConsoleEngine;
+
 int main()
 {
 	// Create a 200x100 console titled Example

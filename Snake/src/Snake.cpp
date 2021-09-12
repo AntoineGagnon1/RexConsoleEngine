@@ -11,6 +11,8 @@
 constexpr int MapSize = 50; // The size of the play area
 constexpr int UIWidth = 28; // The width of the ui
 
+using namespace RexConsoleEngine;
+
 class Snake
 {
 public:
@@ -97,7 +99,7 @@ int main()
 	Snake s(MapSize/2, MapSize/2, Snake::Direction::Up);
 
 	float time = 0;
-	int appleX = c->GetRandom(0, MapSize - 1), appleY = c->GetRandom(0, MapSize - 1);
+	int appleX = Random::Get(0, MapSize - 1), appleY = Random::Get(0, MapSize - 1);
 	int score = 0;
 
 	std::vector<std::wstring> scoreTable;
@@ -151,8 +153,8 @@ int main()
 			if (ateApple)
 			{
 				score++;
-				appleX = c->GetRandom(0, MapSize - 1);
-				appleY = c->GetRandom(0, MapSize - 1);
+				appleX = Random::Get(0, MapSize - 1);
+				appleY = Random::Get(0, MapSize - 1);
 			}
 		}
 
