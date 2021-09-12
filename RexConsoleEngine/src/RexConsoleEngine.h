@@ -1,4 +1,5 @@
 #pragma once
+#include <Shlobj.h>
 #define _WIN32_WINNT 0x0500
 #include <windows.h>
 
@@ -7,8 +8,11 @@
 #include <atomic>
 #include <mutex>
 #include <random>
+#include <fstream>
+#include <map>
 
 #define Error(a) PrintError(a, __LINE__) // is undef at the end of the file
+
 
 class Console
 {
@@ -203,6 +207,7 @@ private:
 	static std::atomic_bool m_shouldClose;
 	static std::mutex m_closeMutex;
 	static std::condition_variable m_closeCall;
+
 public:
 
 	Console(unsigned int width, unsigned int height, const std::wstring& title) 
@@ -560,9 +565,197 @@ private:
 	}
 };
 
+
+
+/// <summary>
+/// <para> A very simple way to store and load user data. The data is stored in a (key,value) pair. </para>
+/// <para> Both the key and the value are string and should not contain newlines (\n). See UserData::SanitizeString. </para>
+/// <para> The output file will contain the data a the key=value format. </para>
+/// </summary>
+class UserData
+{
+public:
+	// The file extention used to create and access the files
+	static std::wstring m_fileExtension; // L".userdata"
+private:
+	std::wstring m_filePath; // Path to the file to use
+	
+	std::map<std::string, std::string> m_cache; // Cached values
+
+	constexpr static char KeyValueSeparator = '='; // Separator used in the output file
+
+public:
+	UserData(const std::wstring& appName, const std::wstring& fileName)
+	{
+		// Get the file path and create the folder if needed
+		wchar_t* appDataPath = 0;
+		SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &appDataPath);
+
+		m_filePath = appDataPath;
+		m_filePath += L"\\RexConsoleEngine";
+		CreateDirectory(m_filePath.c_str(), NULL); // Make the RexGameEngine folder (if it does not exist)
+		m_filePath += L"\\" + appName;
+		CreateDirectory(m_filePath.c_str(), NULL); // Make the app specific folder (if it does not exist)
+		m_filePath += L"\\" + fileName + m_fileExtension;
+		CoTaskMemFree(static_cast<void*>(appDataPath)); // Free the memory used by GetKnownFolderPath
+
+		GetCache();
+	}
+
+	// Get the value at the key, returns true if found and false if not
+	bool Get(const std::string& key, std::string& outValue)
+	{
+		auto iterator = m_cache.find(key);
+		if (iterator == m_cache.end()) // Not found in cache, reload it
+		{
+			GetCache();
+			iterator = m_cache.find(key);
+		}
+
+		if (iterator == m_cache.end()) // Not found again
+			return false;
+
+		outValue = iterator->second;
+		return true;
+	}
+
+	// Get the value at the key, returns true if found and false if not. outValue is left untouched if the key wasn't found
+	bool Get(const std::string& key, int& outValue)
+	{
+		std::string str;
+		if (Get(key, str))
+		{
+			outValue = std::stoi(str);
+			return true;
+		}
+
+		return false;
+	}
+
+	// Get the value at the key, returns true if found and false if not. outValue is left untouched if the key wasn't found
+	bool Get(const std::string& key, float& outValue)
+	{
+		std::string str;
+		if (Get(key, str))
+		{
+			outValue = std::stof(str);
+			return true;
+		}
+
+		return false;
+	}
+
+	std::map<std::string, std::string> GetAll(bool reloadCache = true)
+	{
+		if (reloadCache)
+			GetCache();
+		return m_cache;
+	}
+
+	// True == success, false == error
+	bool Set(const std::string& key, const std::string& value)
+	{
+		if (key.find('\n') != std::string::npos || value.find('\n') != std::string::npos) // key and value cannot include \n
+			return false;
+
+		GetCache(); // Update the cache before any save operations
+
+
+		if (m_cache.find(key) == m_cache.end()) // Not in cache, so also not in the file
+		{
+			std::ofstream file(m_filePath, std::ios::app);
+			if (!file.is_open())
+				return false;
+
+			m_cache.insert({ key, value }); // Keep the cache updated
+			file.seekp(file.end); // Add to the end of the file
+			file << key << KeyValueSeparator << value << std::endl;
+			file.close();
+		}
+		else if (value != m_cache[key]) // Not in the cache, write the file from scratch
+		{
+			// Copy the file
+			const std::wstring tempPath = m_filePath + L".temp";
+			std::ifstream src(m_filePath);
+			std::ofstream dst(tempPath);
+			if (!src.is_open() || !dst.is_open())
+				return false;
+
+			dst << src.rdbuf();
+			src.close();
+			dst.close();
+
+			// Copy the data back, but change the value
+			std::ifstream temp(tempPath);
+			std::ofstream file(m_filePath, std::ios::trunc);
+			if (!temp.is_open() || !file.is_open())
+				return false;
+
+			std::string line;
+			while (getline(temp, line))
+			{
+				auto foundPos = line.find(key);
+				if (foundPos == 0) // If the key was found at the start of the line (so it's not a value)
+				{
+					file << key << KeyValueSeparator << value << std::endl;
+				}
+				else
+					file << line << std::endl;
+			}
+
+			temp.close();
+			file.close();
+
+			// Delete the temp file
+			DeleteFile(tempPath.c_str());
+		} // else : the new value was the same as the old
+		
+		return true;
+	}
+
+	static void SanitizeString(std::string& str)
+	{
+		// Change \n to spaces
+		for (int i = 0; i < str.length(); i++)
+		{
+			if (str[i] == '\n')
+				str[i] = ' ';
+		}
+	}
+
+private:
+
+	void GetCache()
+	{
+		std::ifstream file(m_filePath);
+
+		if (!file.is_open())
+			return;
+
+		m_cache.clear();
+
+		for (std::string line; getline(file, line); )
+		{
+			std::size_t splitPos = line.find(KeyValueSeparator);
+			if (splitPos != std::string::npos)
+			{
+				// Dont include spaces either side of the =
+				std::string key = line.substr(0, line[splitPos - 1] == ' ' ? splitPos - 1 : splitPos);
+				std::string value = line.substr(line[splitPos + 1] == ' ' ? splitPos + 2 : splitPos + 1);
+				if(!key.empty() && !value.empty())
+					m_cache.insert({ key, value });
+			}
+		}
+		file.close();
+	}
+};
+
+
 // Define static vars
 std::atomic_bool Console::m_shouldClose(false);
 std::mutex Console::m_closeMutex;
 std::condition_variable Console::m_closeCall;
+
+std::wstring UserData::m_fileExtension(L".userdata");
 
 #undef Error(a)
