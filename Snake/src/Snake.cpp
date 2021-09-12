@@ -4,6 +4,9 @@
 #include <deque>
 #include <time.h>
 #include <algorithm>
+#include <string>
+#include <locale>
+#include <codecvt>
 
 constexpr int MapSize = 50; // The size of the play area
 constexpr int UIWidth = 28; // The width of the ui
@@ -82,23 +85,36 @@ public:
 	}
 };
 
-void RandomApplePos(int& x, int& y)
-{
-	x = rand() % MapSize;
-	y = rand() % MapSize;
-}
-
 int main()
 {
-	srand(time(NULL));
+	std::cout << "Enter Name : ";
+	std::string name;
+	std::cin >> name;
 
 	Console* c = new Console(MapSize + UIWidth, MapSize, L"Snake");
+	UserData scores(L"Snake", L"HighScores");
+	
 	Snake s(MapSize/2, MapSize/2, Snake::Direction::Up);
 
 	float time = 0;
-	int appleX, appleY;
+	int appleX = c->GetRandom(0, MapSize - 1), appleY = c->GetRandom(0, MapSize - 1);
 	int score = 0;
-	RandomApplePos(appleX, appleY);
+
+	std::vector<std::wstring> scoreTable;
+	auto scoreMap = scores.GetAll();
+	
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	for (auto& score : scoreMap)
+	{
+		std::string entry = score.first + ' ' + score.second;
+		if (entry.length() > UIWidth) // Reduce the name size and add ... at the end
+		{
+			entry = entry.substr(0, score.first.length() - (entry.length() - UIWidth) - 3) + "... " + score.second;
+		}
+
+		scoreTable.push_back(converter.from_bytes(entry));
+	}
+
 
 	while (!c->ShouldClose())
 	{
@@ -120,12 +136,23 @@ int main()
 			bool ateApple = s.Contains(appleX, appleY);
 			
 			if (!s.Update(ateApple))
+			{
+				// Dead
+				int maxScore = -1;
+				std::string str;
+				scores.Get(name, maxScore);
+
+				if (score > maxScore)
+					scores.Set(name, std::to_string(score));
+
 				break;
+			}
 			
 			if (ateApple)
 			{
 				score++;
-				RandomApplePos(appleX, appleY);
+				appleX = c->GetRandom(0, MapSize - 1);
+				appleY = c->GetRandom(0, MapSize - 1);
 			}
 		}
 
@@ -143,7 +170,12 @@ int main()
 		c->DrawString(MapSize, 1, Console::Color::Green, Console::Color::Black, L" _____             _\n/  ___|           | |\n\\ `--. _ __   __ _| | _____\n `--. \\ '_ \\ / _` | |/ / _ \\\n/\\__/ / | | | (_| |   <  __/\n\\____/|_| |_|\\__,_|_|\\_\\___|");
 
 		c->DrawString(MapSize + 11, 10, Console::Color::White, Console::Color::Black, L"Score:");
-		c->DrawString(MapSize + (UIWidth / 2) - std::to_wstring(score).length(), 11, Console::Color::White, Console::Color::Black, std::to_wstring(score));
+		c->DrawString(MapSize + (UIWidth / 2) - std::to_wstring(score).length(), 12, Console::Color::White, Console::Color::Black, std::to_wstring(score));
+
+		// Scores
+		c->DrawString(MapSize + 8, 15, Console::Color::White, Console::Color::Black, L"High Scores:");
+		for (int i = 0; i < scoreTable.size(); i++)
+			c->DrawString(MapSize + (UIWidth / 2) - (scoreTable[i].length() / 2), 17 + i, Console::Color::White, Console::Color::Black, scoreTable[i]);
 
 		c->BlipToScreen();
 	}
