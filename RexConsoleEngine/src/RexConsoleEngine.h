@@ -1,6 +1,9 @@
 #pragma once
 #include <Shlobj.h>
 #if _WIN32_WINNT != 0x0500
+	#ifdef _WIN32_WINNT
+		#undef _WIN32_WINNT
+	#endif
 	#define _WIN32_WINNT 0x0500
 #endif
 #include <windows.h>
@@ -265,7 +268,7 @@ namespace RexConsoleEngine
 				Error("Could not set the size of the screen buffer");
 
 			// Set font to 8x8 Terminal (Raster fonts) -> after resizing
-			CONSOLE_FONT_INFOEX font;
+			CONSOLE_FONT_INFOEX font {0}; // {0} is to prevent Local variable is not initialized...
 			font.cbSize = sizeof(CONSOLE_FONT_INFOEX);
 			font.nFont = 0;
 			font.dwFontSize = { 8,8 };
@@ -296,7 +299,7 @@ namespace RexConsoleEngine
 				Error("Could not set the console mode");
 
 			// Disable the cursor
-			CONSOLE_CURSOR_INFO cursorInfo;
+			CONSOLE_CURSOR_INFO cursorInfo {0}; // {0} is to prevent Local variable is not initialized...
 			cursorInfo.dwSize = 1;
 			cursorInfo.bVisible = false;
 			if (!SetConsoleCursorInfo(m_hConsole, &cursorInfo))
@@ -393,7 +396,7 @@ namespace RexConsoleEngine
 				float b = y1 - (m * x1);
 
 				for (int x = x1; x <= x2; x++)
-					Draw(x, roundf(m * x + b), pixel);
+					Draw(x, (int)roundf(m * x + b), pixel);
 			}
 			else // plot along the y axis
 			{
@@ -407,7 +410,7 @@ namespace RexConsoleEngine
 				float b = x1 - (m * y1);
 
 				for (int y = y1; y <= y2; y++)
-					Draw(roundf(m * y + b), y, pixel);
+					Draw((int)roundf(m * y + b), y, pixel);
 			}
 		}
 
@@ -879,13 +882,13 @@ namespace RexConsoleEngine
 
 		static float Get(float min, float max)
 		{
-			std::uniform_real_distribution<float> dist(min, std::nextafter(max, DBL_MAX));
+			std::uniform_real_distribution<float> dist(min, std::nextafter(max, FLT_MAX));
 			return dist(m_randEngine);
 		}
 
 		static int Get(int min, int max)
 		{
-			std::uniform_int_distribution<int> dist(min, std::nextafter(max, DBL_MAX));
+			std::uniform_int_distribution<int> dist(min, max);
 			return dist(m_randEngine);
 		}
 	};
@@ -899,4 +902,4 @@ namespace RexConsoleEngine
 
 }
 
-#undef Error(a)
+#undef Error

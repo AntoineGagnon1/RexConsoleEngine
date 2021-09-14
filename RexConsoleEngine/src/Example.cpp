@@ -36,7 +36,7 @@ int main()
 
 		// Draw a line every 36 degrees in a circle at the center of the screen and offset it on the y axis by the scroll position
 		for (int a = 0; a < 360; a += 36)
-			c->DrawLine(centerX, centerY + scrollPos, centerX + cos(a * (PI / 180.0f)) * 25, centerY + scrollPos + sin(a * (PI / 180.0f)) * 25, (Console::Color)((a / 15) + 1));
+			c->DrawLine(centerX, centerY + scrollPos, (int)(centerX + cos(a * (PI / 180.0f)) * 25), (int)(centerY + scrollPos + sin(a * (PI / 180.0f)) * 25), (Console::Color)((a / 15) + 1));
 
 		// Draw a yellow pixel under the mouse, the pixel will turn red when mouse1 is clicked
 		c->Draw(c->MouseX(), c->MouseY(), Console::Pixel(c->IsPressed(Console::Key::MouseLeft) ? Console::Color::Red : Console::Color::Yellow));
