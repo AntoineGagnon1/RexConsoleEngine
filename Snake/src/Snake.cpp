@@ -92,8 +92,8 @@ int main()
 	std::string name;
 	std::cin >> name;
 
-	Console* c = new Console(MapSize + UIWidth, MapSize, L"Snake");
-	Archive scores(L"Snake", L"HighScores");
+	Console* c = new Console(MapSize + UIWidth, MapSize, "Snake");
+	Archive scores("Snake", "HighScores");
 	
 	Snake s(MapSize/2, MapSize/2, Snake::Direction::Up);
 
@@ -101,7 +101,7 @@ int main()
 	int appleX = Random::Get(0, MapSize - 1), appleY = Random::Get(0, MapSize - 1);
 	int score = 0;
 
-	std::vector<std::wstring> scoreTable;
+	std::vector<std::string> scoreTable;
 	auto scoreMap = scores.GetAll();
 	
 	for (auto& score : scoreMap)
@@ -113,10 +113,7 @@ int main()
 			entry = entry.substr(0, score.first.length() - (entry.length() - UIWidth) - 3) + "... " + score.second;
 		}
 
-		std::wstring temp;
-		wchar_t* wstr = new wchar_t[UIWidth + 1]; // + 1 because of null termination
-		MultiByteToWideChar(CP_UTF8, 0, entry.c_str(), -1, wstr, UIWidth + 1);
-		scoreTable.push_back(std::wstring(wstr));
+		scoreTable.push_back(entry);
 	}
 
 
@@ -174,13 +171,13 @@ int main()
 		c->Fill(MapSize, 0, UIWidth, MapSize, Console::Color::Black);
 
 		// Snake logo
-		c->DrawString(MapSize, 1, Console::Color::Green, Console::Color::Black, L" _____             _\n/  ___|           | |\n\\ `--. _ __   __ _| | _____\n `--. \\ '_ \\ / _` | |/ / _ \\\n/\\__/ / | | | (_| |   <  __/\n\\____/|_| |_|\\__,_|_|\\_\\___|");
+		c->DrawString(MapSize, 1, Console::Color::Green, Console::Color::Black, " _____             _\n/  ___|           | |\n\\ `--. _ __   __ _| | _____\n `--. \\ '_ \\ / _` | |/ / _ \\\n/\\__/ / | | | (_| |   <  __/\n\\____/|_| |_|\\__,_|_|\\_\\___|");
 
-		c->DrawString(MapSize + 11, 10, Console::Color::White, Console::Color::Black, L"Score:");
-		c->DrawString(MapSize + (UIWidth / 2) - std::to_wstring(score).length(), 12, Console::Color::White, Console::Color::Black, std::to_wstring(score));
+		c->DrawString(MapSize + 11, 10, Console::Color::White, Console::Color::Black, "Score:");
+		c->DrawString(MapSize + (UIWidth / 2) - std::to_wstring(score).length(), 12, Console::Color::White, Console::Color::Black, std::to_string(score));
 
 		// Scores
-		c->DrawString(MapSize + 8, 15, Console::Color::White, Console::Color::Black, L"High Scores:");
+		c->DrawString(MapSize + 8, 15, Console::Color::White, Console::Color::Black, "High Scores:");
 		for (int i = 0; i < scoreTable.size(); i++)
 			c->DrawString(MapSize + (UIWidth / 2) - (scoreTable[i].length() / 2), 17 + i, Console::Color::White, Console::Color::Black, scoreTable[i]);
 

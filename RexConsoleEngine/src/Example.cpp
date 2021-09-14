@@ -7,7 +7,7 @@ using namespace RexConsoleEngine;
 int main()
 {
 	// Create a 200x100 console titled Example
-	Console* c = new Console(200,100, L"Example");
+	Console* c = new Console(200,100, "Example");
 
 	int scrollPos = 0; // Position changed by the mouse scroll wheel
 
@@ -28,7 +28,7 @@ int main()
 		c->Clear(Console::Pixel(Console::Color::Black));
 
 		// Showcase the DrawString() method
-		c->DrawString(50, 10, Console::Color::White, Console::Color::Black, L"Hello world !\nAnother line !");
+		c->DrawString(50, 10, Console::Color::White, Console::Color::Black, "Hello world !\nAnother line !");
 
 		// Center of the screen
 		int centerX = c->Width() / 2;

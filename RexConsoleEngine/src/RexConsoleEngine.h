@@ -1,22 +1,35 @@
 #pragma once
 #include <Shlobj.h>
-#define _WIN32_WINNT 0x0500
+#if _WIN32_WINNT != 0x0500
+	#define _WIN32_WINNT 0x0500
+#endif
 #include <windows.h>
 
-#include <iostream>
-#include <chrono>
 #include <atomic>
+#include <chrono>
+#include <deque>
+#include <fstream>
+#include <iostream>
+#include <map>
 #include <mutex>
 #include <random>
-#include <fstream>
-#include <map>
-#include <deque>
-#include <type_traits>
 
 #define Error(a) PrintError(a, __LINE__) // is undef at the end of the file
 
 namespace RexConsoleEngine
 {
+	// Convert string to wstring
+	inline static std::wstring StringToWString(const std::string& str)
+	{
+		int count = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
+		wchar_t* wstr = new wchar_t[count]; // + 1 because of null termination
+		MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, wstr, count);
+		std::wstring wString(wstr);
+		delete[] wstr;
+		return wString;
+	}
+
+
 	/// <summary>
 	/// Class to handle input and output operations with the console
 	/// </summary>
@@ -211,12 +224,14 @@ namespace RexConsoleEngine
 
 	public:
 
-		Console(unsigned int width, unsigned int height, const std::wstring& title)
+		Console(unsigned int width, unsigned int height, const std::string& title)
 			: m_width(width), m_height(height),
 			m_displaySize({ 0, 0, (SHORT)width - 1, (SHORT)height - 1 }),
-			m_mouseDeltaX(0), m_mouseDeltaY(0), m_scrollDelta(0),
-			m_title(title)
+			m_mouseDeltaX(0), m_mouseDeltaY(0), m_scrollDelta(0)
 		{
+			// Convert the title from string to wstring
+			m_title = StringToWString(title);
+
 			// Create the key array and the screen buffer
 			m_keys = new KeyData[KeyCount];
 			m_bufScreen = new CHAR_INFO[m_width * m_height];
@@ -315,7 +330,7 @@ namespace RexConsoleEngine
 		float DeltaTime() const { return m_deltaDrawTime; }
 
 		// Set the title of the window
-		void SetTitle(const std::wstring& title) { m_title = title; }
+		void SetTitle(const std::string& title) { m_title = StringToWString(title); }
 
 		// Should the app close ? (ex : close button was pressed)
 		bool ShouldClose() const { return m_shouldClose.load(); }
@@ -345,7 +360,7 @@ namespace RexConsoleEngine
 		}
 
 		// Draw a string using the top-left position
-		void DrawString(int leftX, int topY, Color foreground, Color background, const std::wstring& str)
+		void DrawString(int leftX, int topY, Color foreground, Color background, const std::string& str)
 		{
 			int x = leftX;
 			for (int i = 0; i < str.length(); i++)
@@ -691,7 +706,7 @@ namespace RexConsoleEngine
 	{
 	public:
 		// The file extention used to create and access the files
-		static std::wstring m_fileExtension; // L".userdata"
+		static std::string m_fileExtension; // ".userdata"
 	private:
 		std::wstring m_filePath; // Path to the file to use
 
@@ -700,7 +715,7 @@ namespace RexConsoleEngine
 		constexpr static char KeyValueSeparator = '='; // Separator used in the output file
 
 	public:
-		Archive(const std::wstring& appName, const std::wstring& fileName)
+		Archive(const std::string& appName, const std::string& fileName)
 		{
 			// Get the file path and create the folder if needed
 			wchar_t* appDataPath = 0;
@@ -709,9 +724,9 @@ namespace RexConsoleEngine
 			m_filePath = appDataPath;
 			m_filePath += L"\\RexConsoleEngine";
 			CreateDirectory(m_filePath.c_str(), NULL); // Make the RexGameEngine folder (if it does not exist)
-			m_filePath += L"\\" + appName;
+			m_filePath += L"\\" + StringToWString(appName);
 			CreateDirectory(m_filePath.c_str(), NULL); // Make the app specific folder (if it does not exist)
-			m_filePath += L"\\" + fileName + m_fileExtension;
+			m_filePath += L"\\" + StringToWString(fileName) + StringToWString(m_fileExtension);
 			CoTaskMemFree(static_cast<void*>(appDataPath)); // Free the memory used by GetKnownFolderPath
 
 			GetCache();
@@ -844,7 +859,7 @@ namespace RexConsoleEngine
 			file.close();
 		}
 	};
-	inline std::wstring Archive::m_fileExtension(L".userdata");
+	inline std::string Archive::m_fileExtension(".userdata");
 
 
 
