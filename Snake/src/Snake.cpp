@@ -5,8 +5,7 @@
 #include <time.h>
 #include <algorithm>
 #include <string>
-#include <locale>
-#include <codecvt>
+#include <stringapiset.h>
 
 constexpr int MapSize = 50; // The size of the play area
 constexpr int UIWidth = 28; // The width of the ui
@@ -94,7 +93,7 @@ int main()
 	std::cin >> name;
 
 	Console* c = new Console(MapSize + UIWidth, MapSize, L"Snake");
-	UserData scores(L"Snake", L"HighScores");
+	Archive scores(L"Snake", L"HighScores");
 	
 	Snake s(MapSize/2, MapSize/2, Snake::Direction::Up);
 
@@ -105,16 +104,19 @@ int main()
 	std::vector<std::wstring> scoreTable;
 	auto scoreMap = scores.GetAll();
 	
-	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 	for (auto& score : scoreMap)
 	{
+		score.second = score.second.substr(0, score.second.length() - 1);
 		std::string entry = score.first + ' ' + score.second;
 		if (entry.length() > UIWidth) // Reduce the name size and add ... at the end
 		{
 			entry = entry.substr(0, score.first.length() - (entry.length() - UIWidth) - 3) + "... " + score.second;
 		}
 
-		scoreTable.push_back(converter.from_bytes(entry));
+		std::wstring temp;
+		wchar_t* wstr = new wchar_t[UIWidth + 1]; // + 1 because of null termination
+		MultiByteToWideChar(CP_UTF8, 0, entry.c_str(), -1, wstr, UIWidth + 1);
+		scoreTable.push_back(std::wstring(wstr));
 	}
 
 
@@ -140,12 +142,15 @@ int main()
 			if (!s.Update(ateApple))
 			{
 				// Dead
-				int maxScore = -1;
+				IntData maxScore(-1);
 				std::string str;
 				scores.Get(name, maxScore);
 
-				if (score > maxScore)
-					scores.Set(name, std::to_string(score));
+				if (score > maxScore.value)
+				{
+					maxScore.value = score;
+					scores.Set(name, maxScore);
+				}
 
 				break;
 			}
@@ -181,7 +186,6 @@ int main()
 
 		c->BlipToScreen();
 	}
-
 
 	delete c;
 	return 0;

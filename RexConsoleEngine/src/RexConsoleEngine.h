@@ -10,12 +10,16 @@
 #include <random>
 #include <fstream>
 #include <map>
+#include <deque>
 #include <type_traits>
 
 #define Error(a) PrintError(a, __LINE__) // is undef at the end of the file
 
 namespace RexConsoleEngine
 {
+	/// <summary>
+	/// Class to handle input and output operations with the console
+	/// </summary>
 	class Console
 	{
 	public:
@@ -304,24 +308,24 @@ namespace RexConsoleEngine
 		}
 
 		// Width of the console, in characters
-		inline int Width() const { return m_width; }
+		int Width() const { return m_width; }
 		// Height of the console, in characters
-		inline int Height() const { return m_height; }
+		int Height() const { return m_height; }
 		// Time since the last BlipToScreen() call, in seconds
-		inline float DeltaTime() const { return m_deltaDrawTime; }
+		float DeltaTime() const { return m_deltaDrawTime; }
 
 		// Set the title of the window
-		inline void SetTitle(const std::wstring& title) { m_title = title; }
+		void SetTitle(const std::wstring& title) { m_title = title; }
 
 		// Should the app close ? (ex : close button was pressed)
-		inline bool ShouldClose() const { return m_shouldClose.load(); }
+		bool ShouldClose() const { return m_shouldClose.load(); }
 
 
 
 		/* ----- Graphics ------ */
 
 		// Fill the buffer with a pixel
-		inline void Clear(const Pixel& pixel)
+		void Clear(const Pixel& pixel)
 		{
 			for (int i = 0; i < m_width * m_height; i++)
 			{
@@ -331,7 +335,7 @@ namespace RexConsoleEngine
 		}
 
 		// Set a pixel at x,y
-		inline void Draw(int x, int y, const Pixel& pixel)
+		void Draw(int x, int y, const Pixel& pixel)
 		{
 			if (x >= 0 && x < m_width && y >= 0 && y < m_height)
 			{
@@ -341,7 +345,7 @@ namespace RexConsoleEngine
 		}
 
 		// Draw a string using the top-left position
-		inline void DrawString(int leftX, int topY, Color foreground, Color background, const std::wstring& str)
+		void DrawString(int leftX, int topY, Color foreground, Color background, const std::wstring& str)
 		{
 			int x = leftX;
 			for (int i = 0; i < str.length(); i++)
@@ -360,7 +364,7 @@ namespace RexConsoleEngine
 		}
 
 		// Draw a line from (x1,y1) to (x2,y2)
-		inline void DrawLine(int x1, int y1, int x2, int y2, const Pixel& pixel) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
+		void DrawLine(int x1, int y1, int x2, int y2, const Pixel& pixel) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
 		{
 			if (abs(x2 - x1) > abs(y2 - y1)) // dx > dy then plot along the x axis (this is to reduce/remove gaps)
 			{
@@ -393,7 +397,7 @@ namespace RexConsoleEngine
 		}
 
 		// Fill the area formed by x,y and width,height using the pixel
-		inline void Fill(int x, int y, int width, int height, const Pixel& pixel)
+		void Fill(int x, int y, int width, int height, const Pixel& pixel)
 		{
 			for (int xPos = x; xPos < x + width; xPos++)
 			{
@@ -403,7 +407,7 @@ namespace RexConsoleEngine
 		}
 
 		// Print the buffer to screen
-		inline void BlipToScreen()
+		void BlipToScreen()
 		{
 			// Delta time
 			auto now = std::chrono::high_resolution_clock::now();
@@ -426,7 +430,7 @@ namespace RexConsoleEngine
 		/* ----- Inputs ----- */
 
 		// Check for new inputs
-		inline void PollInputs()
+		void PollInputs()
 		{
 			m_scrollDelta = 0;
 
@@ -481,23 +485,23 @@ namespace RexConsoleEngine
 		}
 
 		// Is the key pressed now ?
-		inline bool IsPressed(Key key) const { return m_keys[(int)key].isDown; }
+		bool IsPressed(Key key) const { return m_keys[(int)key].isDown; }
 		// Was the key pressed since the last call to PollInputs() ?
-		inline bool WasJustPressed(Key key) const { return m_keys[(int)key].justDown; }
+		bool WasJustPressed(Key key) const { return m_keys[(int)key].justDown; }
 		// Was the key released since the last call to PollInputs() ?
-		inline bool WasJustReleased(Key key) const { return m_keys[(int)key].justUp; }
+		bool WasJustReleased(Key key) const { return m_keys[(int)key].justUp; }
 
 		// Distance traveled by the mouse since the last call to PollInputs()
-		inline int MouseDeltaX() const { return m_mouseDeltaX; }
+		int MouseDeltaX() const { return m_mouseDeltaX; }
 		// Distance traveled by the mouse since the last call to PollInputs()
-		inline int MouseDeltaY() const { return m_mouseDeltaY; }
+		int MouseDeltaY() const { return m_mouseDeltaY; }
 		// Position of the mouse on the screen, in charaters
-		inline int MouseX() const { return m_mouseX; }
+		int MouseX() const { return m_mouseX; }
 		// Position of the mouse on the screen, in charaters
-		inline int MouseY() const { return m_mouseY; }
+		int MouseY() const { return m_mouseY; }
 
 		// If > 0 the user scrolled up, if < 0 the user scrolled down
-		inline int ScrollDelta() const { return m_scrollDelta; }
+		int ScrollDelta() const { return m_scrollDelta; }
 
 	private:
 		// Swap a and b
@@ -523,10 +527,9 @@ namespace RexConsoleEngine
 			if (event == CTRL_CLOSE_EVENT)
 			{
 				std::unique_lock<std::mutex> lock(m_closeMutex);
-				std::chrono::seconds duration(5); // timeout after 5 seconds
 				m_shouldClose.exchange(true);
 
-				m_closeCall.wait_for(lock, duration, [] {return false; });
+				m_closeCall.wait(lock);
 				return TRUE;
 			}
 
@@ -542,13 +545,149 @@ namespace RexConsoleEngine
 			std::cin.get(); // Wait for user feedback
 		}
 	};
+	inline std::atomic_bool Console::m_shouldClose(false);
+	inline std::mutex Console::m_closeMutex;
+	inline std::condition_variable Console::m_closeCall;
+
+
 
 	/// <summary>
-	/// <para> A very simple way to store and load user data. The data is stored in a (key,value) pair. </para>
-	/// <para> Both the key and the value are string and should not contain newlines (\n). See UserData::SanitizeString. </para>
-	/// <para> The output file will contain the data a the key=value format. </para>
+	/// <para> A derivable class to allow objects to be serialized and deserialized. </para>
+	/// <para> The Pop() and Push() functions work from the same starting point : you need to pop in the same order you pushed </para>
+	/// <para> The output format is : "arg1,arg2,arg3,..." with a trailing comma. </para>
 	/// </summary>
 	class UserData
+	{
+	private:
+		std::deque<std::string> m_data;
+
+	public:
+		// Convert the object to a string
+		bool ToString(std::string& out) 
+		{
+			m_data.clear(); // clear the data
+			bool success = Serialize();
+
+			// Copy the data to the output string
+			out = ""; 
+			for (auto& str : m_data)
+				out += str + ",";
+
+			return success;
+		}
+
+		// Update this object using a string
+		bool FromString(const std::string& in)
+		{
+			m_data.clear(); // Clear the data
+
+			// Split the input
+			std::string temp;
+			for (const char& c : in)
+			{
+				if (c == ',')
+				{
+					m_data.push_back(temp);
+					temp = "";
+				}
+				else
+					temp += c;
+			}
+
+			return Deserialize();
+		}
+
+	protected:
+		virtual bool Serialize() = 0; // Use Push() to serialize the object
+		virtual bool Deserialize() = 0; // Use Pop() to form the object
+
+		// Push a new argument
+		void Push(const std::string& value)
+		{
+			m_data.push_back(value);
+		}
+
+		// Pop the next argument
+		std::string Pop()
+		{
+			if (m_data.size() == 0)
+				return "";
+			std::string str = m_data.front(); // Save the string
+			m_data.pop_front(); // Remove it from the vector
+			return str;
+		}
+	};
+
+	// Int UserData type
+	class IntData : public UserData
+	{
+	public:
+		int value;
+
+		IntData(int v) : value (v){}
+
+	protected:
+		bool Serialize() override
+		{
+			Push(std::to_string(value));
+			return true;
+		}
+
+		bool Deserialize() override
+		{
+			value = std::stoi(Pop());
+			return true;
+		}
+	};
+
+	// Float UserData type
+	class FloatData : public UserData
+	{
+	public:
+		float value;
+
+		FloatData(float v) : value(v) {}
+	protected:
+		bool Serialize() override
+		{
+			Push(std::to_string(value));
+			return true;
+		}
+
+		bool Deserialize() override
+		{
+			value = std::stof(Pop());
+			return true;
+		}
+	};
+	
+	// String UserData type
+	class StringData : public UserData
+	{
+	public:
+		std::string value;
+
+		StringData(std::string v) : value(v) {}
+	protected:
+		bool Serialize() override
+		{
+			Push(value);
+			return true;
+		}
+
+		bool Deserialize() override
+		{
+			value = Pop();
+			return true;
+		}
+	};
+
+	/// <summary>
+	/// <para> A very primitive way to store and load user data. The data is stored in a (key,value) pair. </para>
+	/// <para> Both the key and the value are string and should not contain newlines (\n) or commas (,): See UserData::SanitizeString. </para>
+	/// <para> The output file will contain the data a the key=value format. </para>
+	/// </summary>
+	class Archive
 	{
 	public:
 		// The file extention used to create and access the files
@@ -561,7 +700,7 @@ namespace RexConsoleEngine
 		constexpr static char KeyValueSeparator = '='; // Separator used in the output file
 
 	public:
-		UserData(const std::wstring& appName, const std::wstring& fileName)
+		Archive(const std::wstring& appName, const std::wstring& fileName)
 		{
 			// Get the file path and create the folder if needed
 			wchar_t* appDataPath = 0;
@@ -578,8 +717,8 @@ namespace RexConsoleEngine
 			GetCache();
 		}
 
-		// Get the value at the key, returns true if found and false if not
-		bool Get(const std::string& key, std::string& outValue)
+		// Get the value at the key, returns true for success
+		bool Get(const std::string& key, UserData& outValue)
 		{
 			auto iterator = m_cache.find(key);
 			if (iterator == m_cache.end()) // Not found in cache, reload it
@@ -591,36 +730,10 @@ namespace RexConsoleEngine
 			if (iterator == m_cache.end()) // Not found again
 				return false;
 
-			outValue = iterator->second;
-			return true;
+			return outValue.FromString(iterator->second);
 		}
 
-		// Get the value at the key, returns true if found and false if not. outValue is left untouched if the key wasn't found
-		bool Get(const std::string& key, int& outValue)
-		{
-			std::string str;
-			if (Get(key, str))
-			{
-				outValue = std::stoi(str);
-				return true;
-			}
-
-			return false;
-		}
-
-		// Get the value at the key, returns true if found and false if not. outValue is left untouched if the key wasn't found
-		bool Get(const std::string& key, float& outValue)
-		{
-			std::string str;
-			if (Get(key, str))
-			{
-				outValue = std::stof(str);
-				return true;
-			}
-
-			return false;
-		}
-
+		// Get all of the data in the Archive as strings
 		std::map<std::string, std::string> GetAll(bool reloadCache = true)
 		{
 			if (reloadCache)
@@ -628,11 +741,15 @@ namespace RexConsoleEngine
 			return m_cache;
 		}
 
-		// True == success, false == error
-		bool Set(const std::string& key, const std::string& value)
+		// Returns true for success, the key and value are sanitized
+		bool Set(std::string& key, UserData& value)
 		{
-			if (key.find('\n') != std::string::npos || value.find('\n') != std::string::npos) // key and value cannot include \n
+			std::string strValue;
+			if (!value.ToString(strValue))
 				return false;
+
+			SanitizeString(key);
+			SanitizeString(strValue);
 
 			GetCache(); // Update the cache before any save operations
 
@@ -643,12 +760,12 @@ namespace RexConsoleEngine
 				if (!file.is_open())
 					return false;
 
-				m_cache.insert({ key, value }); // Keep the cache updated
+				m_cache.insert({ key, strValue }); // Keep the cache updated
 				file.seekp(file.end); // Add to the end of the file
-				file << key << KeyValueSeparator << value << std::endl;
+				file << key << KeyValueSeparator << strValue << std::endl;
 				file.close();
 			}
-			else if (value != m_cache[key]) // Not in the cache, write the file from scratch
+			else if (strValue != m_cache[key]) // Not in the cache, write the file from scratch
 			{
 				// Copy the file
 				const std::wstring tempPath = m_filePath + L".temp";
@@ -673,7 +790,7 @@ namespace RexConsoleEngine
 					auto foundPos = line.find(key);
 					if (foundPos == 0) // If the key was found at the start of the line (so it's not a value)
 					{
-						file << key << KeyValueSeparator << value << std::endl;
+						file << key << KeyValueSeparator << strValue << std::endl;
 					}
 					else
 						file << line << std::endl;
@@ -691,11 +808,13 @@ namespace RexConsoleEngine
 
 		static void SanitizeString(std::string& str)
 		{
-			// Change \n to spaces
+			// Change \n to spaces and , to .
 			for (int i = 0; i < str.length(); i++)
 			{
 				if (str[i] == '\n')
 					str[i] = ' ';
+				else if (str[i] == ',')
+					str[i] = '.';
 			}
 		}
 
@@ -725,40 +844,44 @@ namespace RexConsoleEngine
 			file.close();
 		}
 	};
+	inline std::wstring Archive::m_fileExtension(L".userdata");
 
+
+
+	/// <summary>
+	/// A simple random number generator, a new random seed is automatically set at application launch
+	/// </summary>
 	class Random
 	{
 	private:
 		static std::mt19937 m_randEngine;
 
 	public:
+		static void Seed(int seed)
+		{
+			m_randEngine.seed(seed);
+		}
 
-		static inline float Get(float min, float max)
+		static float Get(float min, float max)
 		{
 			std::uniform_real_distribution<float> dist(min, std::nextafter(max, DBL_MAX));
 			return dist(m_randEngine);
 		}
 
-		static inline int Get(int min, int max)
+		static int Get(int min, int max)
 		{
 			std::uniform_int_distribution<int> dist(min, std::nextafter(max, DBL_MAX));
 			return dist(m_randEngine);
 		}
 	};
-	std::mt19937 Random::m_randEngine = [] 
+	inline std::mt19937 Random::m_randEngine = [] 
 	{
 		// Seed the random engine
 		std::random_device rd;
-		m_randEngine.seed(rd());
+		Seed(rd());
 		return m_randEngine;
 	}();
 
-	// Define static vars
-	std::atomic_bool Console::m_shouldClose(false);
-	std::mutex Console::m_closeMutex;
-	std::condition_variable Console::m_closeCall;
-
-	std::wstring UserData::m_fileExtension(L".userdata");
-
 }
+
 #undef Error(a)
