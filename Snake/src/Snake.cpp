@@ -171,15 +171,15 @@ int main()
 		c->Fill(MapSize, 0, UIWidth, MapSize, Console::Color::Black);
 
 		// Snake logo
-		c->DrawString(MapSize, 1, Console::Color::Green, Console::Color::Black, " _____             _\n/  ___|           | |\n\\ `--. _ __   __ _| | _____\n `--. \\ '_ \\ / _` | |/ / _ \\\n/\\__/ / | | | (_| |   <  __/\n\\____/|_| |_|\\__,_|_|\\_\\___|");
+		c->Draw(MapSize, 1, DrawString(" _____             _\n/  ___|           | |\n\\ `--. _ __   __ _| | _____\n `--. \\ '_ \\ / _` | |/ / _ \\\n/\\__/ / | | | (_| |   <  __/\n\\____/|_| |_|\\__,_|_|\\_\\___|", Console::Color::Green, Console::Color::Black));
 
-		c->DrawString(MapSize + 11, 10, Console::Color::White, Console::Color::Black, "Score:");
-		c->DrawString(MapSize + (UIWidth / 2) - (int)std::to_wstring(score).length(), 12, Console::Color::White, Console::Color::Black, std::to_string(score));
+		c->Draw(MapSize + 11, 10, DrawString("Score:", Console::Color::White, Console::Color::Black));
+		c->Draw(MapSize + (UIWidth / 2) - (int)std::to_wstring(score).length(), 12, DrawString(std::to_string(score), Console::Color::White, Console::Color::Black));
 
 		// Scores
-		c->DrawString(MapSize + 8, 15, Console::Color::White, Console::Color::Black, "High Scores:");
+		c->Draw(MapSize + 8, 15, DrawString("High Scores:", Console::Color::White, Console::Color::Black));
 		for (int i = 0; i < scoreTable.size(); i++)
-			c->DrawString(MapSize + (UIWidth / 2) - ((int)scoreTable[i].length() / 2), 17 + i, Console::Color::White, Console::Color::Black, scoreTable[i]);
+			c->Draw(MapSize + (UIWidth / 2) - ((int)scoreTable[i].length() / 2), 17 + i, DrawString(scoreTable[i], Console::Color::White, Console::Color::Black));
 
 		c->BlipToScreen();
 	}

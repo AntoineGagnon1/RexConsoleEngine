@@ -17,6 +17,8 @@
 #include <mutex>
 #include <random>
 
+#pragma warning(disable:4996) // fopen
+
 #define Error(a) PrintError(a, __LINE__) // is undef at the end of the file
 
 namespace RexConsoleEngine
@@ -31,7 +33,7 @@ namespace RexConsoleEngine
 		delete[] wstr;
 		return wString;
 	}
-
+	
 
 	/// <summary>
 	/// Class to handle input and output operations with the console
@@ -72,6 +74,15 @@ namespace RexConsoleEngine
 
 			Pixel(Console::Color c, char character) : Pixel(c, (Type)character) {}
 			Pixel(Console::Color foreground, Console::Color background, char character) : Pixel(foreground, background, (Type)character) {}
+		};
+
+		/// <summary>
+		/// A drawable object
+		/// </summary>
+		class Drawable
+		{
+		public:
+			virtual void Draw(int x, int y, Console& console) const = 0;
 		};
 
 		enum class Key
@@ -362,24 +373,8 @@ namespace RexConsoleEngine
 			}
 		}
 
-		// Draw a string using the top-left position
-		void DrawString(int leftX, int topY, Color foreground, Color background, const std::string& str)
-		{
-			int x = leftX;
-			for (int i = 0; i < str.length(); i++)
-			{
-				if (str[i] == '\n')
-				{
-					x = leftX;
-					topY++;
-				}
-				else
-				{
-					Draw(x, topY, Pixel(foreground, background, str[i]));
-					x++;
-				}
-			}
-		}
+		// Draw a drawable object at x,y
+		void Draw(int x, int y, const Drawable& drawable) { drawable.Draw(x,y, *this); }
 
 		// Draw a line from (x1,y1) to (x2,y2)
 		void DrawLine(int x1, int y1, int x2, int y2, const Pixel& pixel) // Very bad and slow, uses the y = mx+b and x = my+b equations to draw
@@ -521,6 +516,45 @@ namespace RexConsoleEngine
 		// If > 0 the user scrolled up, if < 0 the user scrolled down
 		int ScrollDelta() const { return m_scrollDelta; }
 
+
+		// Convert RGB values to Color
+		static Color RGBToColor(UINT8* rgb)
+		{
+			static const UINT8 colorRGB[16][3] = {
+				{0,0,0}, // Black
+				{0,0,128}, // Dark Blue
+				{0,128,0}, // Dark Green
+				{0,128,128}, // Dark Cyan
+				{128,0,0}, // Dark Red
+				{128,0,128}, // Dark Magenta
+				{128,128,0}, // Dark Yellow
+				{192,192,192}, // Grey
+				{128,128,128}, // Dark Grey
+				{0,0,255}, // Bright Blue
+				{0,255,0}, // Bright Green
+				{0,255,255}, // Bright Cyan
+				{255,0,0}, // Bright Red
+				{255,0,255}, // Bright Magenta
+				{255,255,0}, // Bright Yellow
+				{255,255,255}, // White
+			};
+
+			// Calculate the distance between the R, G and B values (3d vector distance function)
+			float minDistance = FLT_MAX; // The min distance found
+			int color = -1; // the color linked with the minDistance
+			for (int i = 0; i < 16; i++)
+			{
+				float dist = (float)pow(colorRGB[i][0] - rgb[0], 2) + (float)pow(colorRGB[i][1] - rgb[1], 2) + (float)pow(colorRGB[i][2] - rgb[2], 2);
+				if (dist < minDistance)
+				{
+					minDistance = dist;
+					color = i;
+				}
+			}
+
+			return (Color)color;
+		}
+
 	private:
 		// Swap a and b
 		template<class T>
@@ -567,6 +601,115 @@ namespace RexConsoleEngine
 	inline std::mutex Console::m_closeMutex;
 	inline std::condition_variable Console::m_closeCall;
 
+	/// <summary>
+	/// A drawable string
+	/// </summary>
+	class DrawString : public Console::Drawable
+	{
+	private:
+		std::string m_str;
+		Console::Color m_foreground, m_background;
+	public:
+		DrawString(const std::string& str, Console::Color foreground, Console::Color background) 
+			: m_str(str), m_foreground(foreground), m_background(background) {}
+
+		void Draw(int x, int y, Console& console) const override
+		{
+			int dx = x;
+			for (int i = 0; i < m_str.length(); i++)
+			{
+				if (m_str[i] == '\n')
+				{
+					dx = x;
+					y++;
+				}
+				else
+				{
+					console.Draw(dx, y, Console::Pixel(m_foreground, m_background, m_str[i]));
+					dx++;
+				}
+			}
+		}
+
+	};
+
+	/// <summary>
+	/// A sprite to be displayed
+	/// For now only 16 colors bmps are supported
+	/// </summary>
+	class Sprite : public Console::Drawable
+	{
+	public:
+		UINT32 m_width, m_height;
+		Console::Color* m_colors; // Pixel data
+
+	public:
+
+		~Sprite()
+		{
+			if (m_colors != nullptr)
+				delete[] m_colors;
+		}
+
+		void Draw(int x, int y, Console& console) const override
+		{
+			for (unsigned int dx = 0; dx < m_width; dx++)
+			{
+				for (unsigned int dy = 0; dy < m_height; dy++)
+				{
+					console.Draw(dx + x, dy + y, m_colors[dy * m_width + dx]);
+				}
+			}
+		}
+
+		// Load from bitmap, only 16 color mode supported for now, returns false on errors
+		bool LoadBMP(const std::string& path)
+		{
+			// Usefull link for the bmp file format : 
+			// http://www.ece.ualberta.ca/~elliott/ee552/studentAppNotes/2003_w/misc/bmp_file_format/bmp_file_format.htm
+
+			std::FILE* f = std::fopen(path.c_str(), "rb"); // Open the file in binary mode
+			if (f == nullptr)
+				return false;
+
+			// Get the start offset of the pixel data, the width and the height
+			UINT32 offset;
+			std::fseek(f, 10, SEEK_CUR); // Skip to DataOffset
+			std::fread(&offset, sizeof(UINT32), 1, f);
+			std::fseek(f, 4, SEEK_CUR); // Skip to size
+			std::fread(&m_width, sizeof(UINT32), 1, f);
+			std::fread(&m_height, sizeof(UINT32), 1, f);
+
+			m_colors = new Console::Color[m_width * m_height];
+
+			std::fseek(f, 54, SEEK_SET); // Skip to the ColorTable
+			UINT8 colorTable[4 * 16]; // Color table
+			std::fread(&colorTable, sizeof(UINT8), 4 * 16, f);
+			for (int i = 0; i < 16; i++) // colors are saved as BGR, flip them to RGB
+			{
+				int B = colorTable[i * 4];
+				int R = colorTable[i * 4 + 2];
+				colorTable[i * 4] = R;
+				colorTable[i * 4 + 2] = B;
+			}
+
+			std::fseek(f, offset, SEEK_SET); // Skip to DataOffset
+			for (unsigned int y = 0; y < m_height; y++)
+			{
+				for (unsigned int x = 0; x < m_width / 2; x++)
+				{
+					UINT8 value;
+					std::fread(&value, sizeof(UINT8), 1, f);
+					m_colors[(m_height - 1 - y) * m_width + (x * 2)] = Console::RGBToColor(&colorTable[((value & 0b11110000)>>4) * 4]); // First pixel in the byte
+					m_colors[(m_height - 1 - y) * m_width + (x * 2 + 1)] = Console::RGBToColor(&colorTable[(value & 0b00001111) * 4]); // Second pixel in the byte
+				}
+
+				std::fseek(f, (4 - ((m_width / 2) % 4)) % 4, SEEK_CUR); // Each line is padded up to a multiple of 4 bytes
+			}
+
+			return true;
+		}
+	};
 
 
 	/// <summary>
